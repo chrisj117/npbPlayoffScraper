@@ -166,11 +166,6 @@ class PlayerData(Stats):
         self.df = self.df.groupby(self.df["Pitcher"], as_index=False).agg(
             agg_functions
         )
-        # DEBUG
-        # self.df.to_csv("test.csv",index=False)
-        print(self.df.to_string())
-        with open("output.txt", "w") as f:
-            print(self.df.to_string(), file=f)
 
         # Translate player names TODO
 
@@ -182,6 +177,8 @@ class PlayerData(Stats):
         self.df.drop(["BK", "PCT"], axis=1, inplace=True)
         # IP ".0 .1 .2" fix
         self.df["IP"] = convert_ip_column_in(self.df)
+        # Recalculate ERA
+        self.df["ERA"] = (9 * self.df["ER"]) / self.df["IP"]
 
         # Counting stat column totals
         totalIP = self.df["IP"].sum()
