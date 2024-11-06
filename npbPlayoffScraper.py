@@ -31,8 +31,16 @@ def main():
         get_playoff_stats(yearDir, "PP", scrapeYear)
     postBatPlayerStats = PlayerData(statsDir, yearDir, "BP", scrapeYear)
     postPitchPlayerStats = PlayerData(statsDir, yearDir, "PP", scrapeYear)
+    postBatTeamStats = TeamData(
+        postBatPlayerStats.df, statsDir, yearDir, "BP", scrapeYear
+    )
+    postPitchTeamStats = TeamData(
+        postPitchPlayerStats.df, statsDir, yearDir, "PP", scrapeYear
+    )
     postBatPlayerStats.output_final()
     postPitchPlayerStats.output_final()
+    postBatTeamStats.output_final()
+    postPitchTeamStats.output_final()
 
 
 class Stats:
@@ -173,8 +181,8 @@ class PlayerData(Stats):
         # for calculations
         self.df["ERA"] = self.df["ERA"].astype(str).replace("----", "inf")
         self.df["ERA"] = self.df["ERA"].astype(float)
-        # Drop BK, and PCT columns
-        self.df.drop(["BK", "PCT"], axis=1, inplace=True)
+        # Drop BK, HLD, and PCT columns
+        self.df.drop(["BK", "PCT", "HLD"], axis=1, inplace=True)
         # IP ".0 .1 .2" fix
         self.df["IP"] = convert_ip_column_in(self.df)
         # Recalculate ERA
@@ -285,7 +293,6 @@ class PlayerData(Stats):
                 "W",
                 "L",
                 "SV",
-                "HLD",
                 "CG",
                 "SHO",
                 "BF",
@@ -503,6 +510,514 @@ class PlayerData(Stats):
             ]
         ]
 
+        # Add "League" column
+        self.df = select_league(self.df, self.suffix)
+
+
+class TeamData(Stats):
+    def __init__(self, playerDf, statsDir, yearDir, suffix, year):
+        """TeamData new variables:
+        playerDf (pandas dataframe): Holds an entire NPB league's individual
+        batting/pitching stats"""
+        super().__init__(statsDir, yearDir, suffix, year)
+        self.playerDf = playerDf.copy()
+        # Initialize df for teams stats
+        if self.suffix == "BP":
+            self.org_team_bat()
+        elif self.suffix == "PP":
+            self.org_team_pitch()
+
+    def __str__(self):
+        """Outputs the Alt view of the associated dataframe (no HTML
+        team or player names, no csv formatting, shows entire df instead of
+        only Leaders)"""
+        return self.df.to_string()
+
+    def output_final(self):
+        """Outputs final files for upload using the team stat dataframes
+        (CONVERSION OF writeTeamStats())
+
+        Parameters: N/A
+
+        Returns: N/A"""
+        # Make dir that will store alt views of the dataframes
+        altDir = os.path.join(self.yearDir, "alt")
+        if not (os.path.exists(altDir)):
+            os.mkdir(altDir)
+        # Make dirs that will store files uploaded to yakyucosmo.com
+        uploadDir = self.yearDir
+        if self.suffix == "PP" or self.suffix == "BP":
+            uploadDir = os.path.join(self.yearDir, "npb")
+            if not (os.path.exists(uploadDir)):
+                os.mkdir(uploadDir)
+        # Print organized dataframe to file
+        newCsvAlt = altDir + "/" + self.year + "TeamAlt" + self.suffix + ".csv"
+        self.df.to_string(newCsvAlt)
+        # Make output copy to avoid modifying original df
+        finalDf = self.df.copy()
+        # Insert HTML code for team names
+        finalDf = convert_team_to_html(finalDf, "Full")
+        # Print output file for upload
+        newCsvFinal = (
+            uploadDir + "/" + self.year + "Team" + self.suffix + ".csv"
+        )
+        finalDf.to_csv(newCsvFinal, index=False)
+
+        # Pitching TeamAlt and Team file location outputs
+        if self.suffix == "PP" or self.suffix == "BP":
+            print(
+                "The final organized team pitching results will be stored "
+                "in: " + newCsvFinal
+            )
+            print(
+                "An alternative view of team pitching results will be stored"
+                "in: " + newCsvAlt
+            )
+
+    def org_team_bat(self):
+        """Outputs batting team stat files using the organized player stat
+        dataframes (CONVERSION OF batTeamOrg())
+
+        Parameters: N/A
+
+        Returns: N/A"""
+        # Initialize new row list with all possible teams
+        rowArr = [
+            "Hanshin Tigers",
+            "Hiroshima Carp",
+            "DeNA BayStars",
+            "Yomiuri Giants",
+            "Yakult Swallows",
+            "Chunichi Dragons",
+            "ORIX Buffaloes",
+            "Lotte Marines",
+            "SoftBank Hawks",
+            "Rakuten Eagles",
+            "Seibu Lions",
+            "Nipponham Fighters",
+        ]
+
+        # Initialize a list and put team columns in first
+        # REFACTOR (?)
+        colArr = [
+            "Team",
+            "PA",
+            "AB",
+            "R",
+            "H",
+            "2B",
+            "3B",
+            "HR",
+            "TB",
+            "RBI",
+            "SB",
+            "CS",
+            "SH",
+            "SF",
+            "SO",
+            "BB",
+            "IBB",
+            "HP",
+            "GDP",
+            "AVG",
+            "OBP",
+            "SLG",
+            "OPS",
+            "OPS+",
+            "ISO",
+            "BABIP",
+            "TTO%",
+            "K%",
+            "BB%",
+            "BB/K",
+        ]
+        teamBatList = []
+        teamBatList.append(colArr)
+
+        # Form team stat rows
+        # REFACTOR (?)
+        for row in rowArr:
+            newTeamStat = [row]
+            tempStatDf = self.playerDf[self.playerDf.Team == row]
+            # Skip teams that didn't play (PA = 0)
+            if tempStatDf["PA"].sum() == 0:
+                continue
+            newTeamStat.append(tempStatDf["PA"].sum())
+            newTeamStat.append(tempStatDf["AB"].sum())
+            newTeamStat.append(tempStatDf["R"].sum())
+            newTeamStat.append(tempStatDf["H"].sum())
+            newTeamStat.append(tempStatDf["2B"].sum())
+            newTeamStat.append(tempStatDf["3B"].sum())
+            newTeamStat.append(tempStatDf["HR"].sum())
+            newTeamStat.append(tempStatDf["TB"].sum())
+            newTeamStat.append(tempStatDf["RBI"].sum())
+            newTeamStat.append(tempStatDf["SB"].sum())
+            newTeamStat.append(tempStatDf["CS"].sum())
+            newTeamStat.append(tempStatDf["SH"].sum())
+            newTeamStat.append(tempStatDf["SF"].sum())
+            newTeamStat.append(tempStatDf["SO"].sum())
+            newTeamStat.append(tempStatDf["BB"].sum())
+            newTeamStat.append(tempStatDf["IBB"].sum())
+            newTeamStat.append(tempStatDf["HP"].sum())
+            newTeamStat.append(tempStatDf["GDP"].sum())
+            totalH = tempStatDf["H"].sum()
+            total2B = tempStatDf["2B"].sum()
+            total3B = tempStatDf["3B"].sum()
+            totalHR = tempStatDf["HR"].sum()
+            totalSF = tempStatDf["SF"].sum()
+            totalBB = tempStatDf["BB"].sum()
+            totalHP = tempStatDf["HP"].sum()
+            totalAB = tempStatDf["AB"].sum()
+            totalAVG = round((totalH / totalAB), 3)
+            newTeamStat.append(totalAVG)
+            totalOBP = round(
+                (
+                    (totalH + totalBB + totalHP)
+                    / (totalAB + totalBB + totalHP + totalSF)
+                ),
+                3,
+            )
+            newTeamStat.append(totalOBP)
+            tempSLG1 = totalH - total2B - total3B - totalHR
+            tempSLG2 = (2 * total2B) + (3 * total3B) + (4 * totalHR)
+            totalSLG = round((((tempSLG1 + tempSLG2) / totalAB)), 3)
+            newTeamStat.append(totalSLG)
+            totalOPS = round((totalOBP + totalSLG), 3)
+            newTeamStat.append(totalOPS)
+            teamBatList.append(newTeamStat)
+
+        teamConst = 12
+        # Getting league stat totals (last row to be appended to the dataframe)
+        newTeamStat = ["League Average"]
+        newTeamStat.append(round(self.playerDf["PA"].sum() / teamConst, 0))
+        newTeamStat.append(round(self.playerDf["AB"].sum() / teamConst, 0))
+        newTeamStat.append(round(self.playerDf["R"].sum() / teamConst, 0))
+        newTeamStat.append(round(self.playerDf["H"].sum() / teamConst, 0))
+        newTeamStat.append(round(self.playerDf["2B"].sum() / teamConst, 0))
+        newTeamStat.append(round(self.playerDf["3B"].sum() / teamConst, 0))
+        newTeamStat.append(round(self.playerDf["HR"].sum() / teamConst, 0))
+        newTeamStat.append(round(self.playerDf["TB"].sum() / teamConst, 0))
+        newTeamStat.append(round(self.playerDf["RBI"].sum() / teamConst, 0))
+        newTeamStat.append(round(self.playerDf["SB"].sum() / teamConst, 0))
+        newTeamStat.append(round(self.playerDf["CS"].sum() / teamConst, 0))
+        newTeamStat.append(round(self.playerDf["SH"].sum() / teamConst, 0))
+        newTeamStat.append(round(self.playerDf["SF"].sum() / teamConst, 0))
+        newTeamStat.append(round(self.playerDf["SO"].sum() / teamConst, 0))
+        newTeamStat.append(round(self.playerDf["BB"].sum() / teamConst, 0))
+        newTeamStat.append(round(self.playerDf["IBB"].sum() / teamConst, 0))
+        newTeamStat.append(round(self.playerDf["HP"].sum() / teamConst, 0))
+        newTeamStat.append(round(self.playerDf["GDP"].sum() / teamConst, 0))
+        totalH = self.playerDf["H"].sum()
+        total2B = self.playerDf["2B"].sum()
+        total3B = self.playerDf["3B"].sum()
+        totalHR = self.playerDf["HR"].sum()
+        totalSF = self.playerDf["SF"].sum()
+        totalBB = self.playerDf["BB"].sum()
+        totalHP = self.playerDf["HP"].sum()
+        totalAB = self.playerDf["AB"].sum()
+        totalAVG = round((totalH / totalAB), 3)
+        newTeamStat.append(totalAVG)
+        totalOBP = round(
+            (
+                (totalH + totalBB + totalHP)
+                / (totalAB + totalBB + totalHP + totalSF)
+            ),
+            3,
+        )
+        newTeamStat.append(totalOBP)
+        totalSLG = round(
+            (
+                (
+                    (
+                        (totalH - total2B - total3B - totalHR)
+                        + (2 * total2B)
+                        + (3 * total3B)
+                        + (4 * totalHR)
+                    )
+                    / totalAB
+                )
+            ),
+            3,
+        )
+        newTeamStat.append(totalSLG)
+        totalOPS = round((totalOBP + totalSLG), 3)
+        newTeamStat.append(totalOPS)
+        teamBatList.append(newTeamStat)
+
+        # Initialize new team stat dataframe
+        self.df = pd.DataFrame(teamBatList)
+        # Import adds extra top row of numbers which misaligns columns
+        # Replace with proper row and drop extra number row
+        self.df.columns = self.df.iloc[0]
+        self.df.drop(index=0, axis=1, inplace=True)
+        # Create park factors for any remaining team stats
+        # Team OPS+ needs park factors
+        self.df = select_park_factor(self.df, self.suffix, self.year)
+
+        # Calculate OPS+ with new dataframe
+        # Total OPS of the teams / total OPS of the league
+        self.df["OPS+"] = round(
+            100
+            * ((self.df["OBP"] / totalOBP) + (self.df["SLG"] / totalSLG) - 1),
+            0,
+        )
+        self.df["OPS+"] = self.df["OPS+"] / self.df["ParkF"]
+        # Calculate ISO
+        self.df["ISO"] = round(self.df["SLG"] - self.df["AVG"], 3)
+        # Calculate K%
+        self.df["K%"] = round(self.df["SO"] / self.df["PA"], 3)
+        # Calculate BB%
+        self.df["BB%"] = round(self.df["BB"] / self.df["PA"], 3)
+        # Calculate BB/K
+        self.df["BB/K"] = round(self.df["BB"] / self.df["SO"], 2)
+        # Calculate TTO%
+        self.df["TTO%"] = (
+            self.df["BB"] + self.df["SO"] + self.df["HR"]
+        ) / self.df["PA"]
+        self.df["TTO%"] = self.df["TTO%"].apply("{:.1%}".format)
+        # Calculate BABIP
+        numer = self.df["H"] - self.df["HR"]
+        denom = self.df["AB"] - self.df["SO"] - self.df["HR"] + self.df["SF"]
+        self.df["BABIP"] = round((numer / denom), 3)
+
+        # Remove temp Park Factor column
+        self.df.drop("ParkF", axis=1, inplace=True)
+        # Number formatting
+        formatMapping = {
+            "BB%": "{:.1%}",
+            "K%": "{:.1%}",
+            "AVG": "{:.3f}",
+            "OBP": "{:.3f}",
+            "SLG": "{:.3f}",
+            "OPS": "{:.3f}",
+            "ISO": "{:.3f}",
+            "BABIP": "{:.3f}",
+            "BB/K": "{:.2f}",
+            "OPS+": "{:.0f}",
+            "PA": "{:.0f}",
+            "AB": "{:.0f}",
+            "2B": "{:.0f}",
+            "3B": "{:.0f}",
+            "TB": "{:.0f}",
+            "RBI": "{:.0f}",
+            "SB": "{:.0f}",
+            "CS": "{:.0f}",
+            "SH": "{:.0f}",
+            "SF": "{:.0f}",
+            "HP": "{:.0f}",
+            "GDP": "{:.0f}",
+            "H": "{:.0f}",
+            "HR": "{:.0f}",
+            "SO": "{:.0f}",
+            "BB": "{:.0f}",
+            "IBB": "{:.0f}",
+            "R": "{:.0f}",
+        }
+        for key, value in formatMapping.items():
+            self.df[key] = self.df[key].apply(value.format)
+
+        # Add "League" column
+        self.df = select_league(self.df, self.suffix)
+
+    def org_team_pitch(self):
+        """Outputs pitching team stat files using the organized player stat
+        dataframes (CONVERSION OF pitchTeamOrg())
+
+        Parameters: N/A
+
+        Returns: N/A"""
+        # IP column ".1 .2 .3" calculation fix
+        self.playerDf["IP"] = convert_ip_column_in(self.playerDf)
+        # Initialize new row list with all possible teams
+        rowArr = [
+            "Hanshin Tigers",
+            "Hiroshima Carp",
+            "DeNA BayStars",
+            "Yomiuri Giants",
+            "Yakult Swallows",
+            "Chunichi Dragons",
+            "ORIX Buffaloes",
+            "Lotte Marines",
+            "SoftBank Hawks",
+            "Rakuten Eagles",
+            "Seibu Lions",
+            "Nipponham Fighters",
+        ]
+
+        # Initialize a list and put columns in first
+        teamPitList = [
+            [
+                "Team",
+                "W",
+                "L",
+                "SV",
+                "CG",
+                "SHO",
+                "BF",
+                "IP",
+                "H",
+                "HR",
+                "SO",
+                "BB",
+                "IBB",
+                "HB",
+                "WP",
+                "R",
+                "ER",
+                "ERA",
+                "FIP",
+                "kwERA",
+                "WHIP",
+                "ERA+",
+                "FIP-",
+                "kwERA-",
+                "Diff",
+                "HR%",
+                "K%",
+                "BB%",
+                "K-BB%",
+            ]
+        ]
+
+        # Form team stat rows and collect all COUNTING stats
+        # TODO: REFACTOR (?)
+        teamConst = 0
+        for row in rowArr:
+            newTeamStat = [row]
+            tempStatDf = self.playerDf[self.playerDf.Team == row]
+            if tempStatDf["IP"].sum() == 0:
+                continue
+            newTeamStat.append(tempStatDf["W"].sum())
+            newTeamStat.append(tempStatDf["L"].sum())
+            newTeamStat.append(tempStatDf["SV"].sum())
+            newTeamStat.append(tempStatDf["CG"].sum())
+            newTeamStat.append(tempStatDf["SHO"].sum())
+            newTeamStat.append(tempStatDf["BF"].sum())
+            newTeamStat.append(tempStatDf["IP"].sum())
+            newTeamStat.append(tempStatDf["H"].sum())
+            newTeamStat.append(tempStatDf["HR"].sum())
+            newTeamStat.append(tempStatDf["SO"].sum())
+            newTeamStat.append(tempStatDf["BB"].sum())
+            newTeamStat.append(tempStatDf["IBB"].sum())
+            newTeamStat.append(tempStatDf["HB"].sum())
+            newTeamStat.append(tempStatDf["WP"].sum())
+            newTeamStat.append(tempStatDf["R"].sum())
+            newTeamStat.append(tempStatDf["ER"].sum())
+            teamPitList.append(newTeamStat)
+            teamConst = teamConst + 1
+
+        # Getting league stat averages for rate stats (last row to be appended)
+        newTeamStat = ["League Average"]
+        newTeamStat.append(round(self.playerDf["W"].sum() / teamConst, 0))
+        newTeamStat.append(round(self.playerDf["L"].sum() / teamConst, 0))
+        newTeamStat.append(round(self.playerDf["SV"].sum() / teamConst, 0))
+        newTeamStat.append(round(self.playerDf["CG"].sum() / teamConst, 0))
+        newTeamStat.append(round(self.playerDf["SHO"].sum() / teamConst, 0))
+        newTeamStat.append(round(self.playerDf["BF"].sum() / teamConst, 0))
+        newTeamStat.append(round(self.playerDf["IP"].sum() / teamConst, 0))
+        newTeamStat.append(round(self.playerDf["H"].sum() / teamConst, 0))
+        newTeamStat.append(round(self.playerDf["HR"].sum() / teamConst, 0))
+        newTeamStat.append(round(self.playerDf["SO"].sum() / teamConst, 0))
+        newTeamStat.append(round(self.playerDf["BB"].sum() / teamConst, 0))
+        newTeamStat.append(round(self.playerDf["IBB"].sum() / teamConst, 0))
+        newTeamStat.append(round(self.playerDf["HB"].sum() / teamConst, 0))
+        newTeamStat.append(round(self.playerDf["WP"].sum() / teamConst, 0))
+        newTeamStat.append(round(self.playerDf["R"].sum() / teamConst, 0))
+        newTeamStat.append(round(self.playerDf["ER"].sum() / teamConst, 0))
+        teamPitList.append(newTeamStat)
+
+        # League totals that are needed for other calculations
+        totalIP = self.playerDf["IP"].sum()
+        totalHR = self.playerDf["HR"].sum()
+        totalSO = self.playerDf["SO"].sum()
+        totalBB = self.playerDf["BB"].sum()
+        totalHB = self.playerDf["HB"].sum()
+        totalER = self.playerDf["ER"].sum()
+        totalBF = self.playerDf["BF"].sum()
+        totalERA = 9 * (totalER / totalIP)
+
+        # Initialize new team stat dataframe
+        self.df = pd.DataFrame(teamPitList)
+        # Import adds extra top row of numbers which misaligns columns,
+        # replace with proper row and drop extra number row
+        self.df.columns = self.df.iloc[0]
+        self.df.drop(index=0, axis=1, inplace=True)
+        # Create park factor col to use for any remaining team stats
+        self.df = select_park_factor(self.df, self.suffix, self.year)
+        # League totals have park factor as 1.000
+        self.df["ParkF"] = self.df["ParkF"].replace(0.000, 1.000)
+
+        # Calculations for RATE stats
+        self.df["ERA"] = round(9 * (self.df["ER"] / self.df["IP"]), 2)
+        self.df["ERA+"] = 100 * (totalERA * self.df["ParkF"]) / self.df["ERA"]
+        self.df["kwERA"] = round(
+            (4.80 - (10 * ((self.df["SO"] - self.df["BB"]) / self.df["BF"]))),
+            2,
+        )
+        totalkwERA = round((4.80 - (10 * ((totalSO - totalBB) / totalBF))), 2)
+        self.df["K%"] = round(self.df["SO"] / self.df["BF"], 3)
+        self.df["BB%"] = round(self.df["BB"] / self.df["BF"], 3)
+        self.df["K-BB%"] = round(self.df["K%"] - self.df["BB%"], 3)
+        temp1 = 13 * self.df["HR"]
+        temp2 = 3 * (self.df["BB"] + self.df["HB"])
+        temp3 = 2 * self.df["SO"]
+        self.df["FIP"] = round(
+            ((temp1 + temp2 - temp3) / self.df["IP"])
+            + select_fip_const(self.suffix, self.year),
+            2,
+        )
+        temp1 = 13 * totalHR
+        temp2 = 3 * (totalBB + totalHB)
+        temp3 = 2 * totalSO
+        totalFIP = ((temp1 + temp2 - temp3) / totalIP) + select_fip_const(
+            self.suffix, self.year
+        )
+        self.df["FIP-"] = round(
+            (100 * (self.df["FIP"] / (totalFIP * self.df["ParkF"]))), 0
+        )
+        self.df["WHIP"] = round(
+            (self.df["BB"] + self.df["H"]) / self.df["IP"], 2
+        )
+        self.df["Diff"] = self.df["ERA"] - self.df["FIP"]
+        self.df["HR%"] = self.df["HR"] / self.df["BF"]
+        self.df["kwERA-"] = round((100 * (self.df["kwERA"] / totalkwERA)), 0)
+
+        # Remove temp Park Factor column
+        self.df.drop("ParkF", axis=1, inplace=True)
+        # Number formatting
+        formatMapping = {
+            "BB%": "{:.1%}",
+            "K%": "{:.1%}",
+            "K-BB%": "{:.1%}",
+            "HR%": "{:.1%}",
+            "Diff": "{:.2f}",
+            "FIP": "{:.2f}",
+            "WHIP": "{:.2f}",
+            "kwERA": "{:.2f}",
+            "ERA": "{:.2f}",
+            "kwERA-": "{:.1f}",
+            "ERA+": "{:.0f}",
+            "FIP-": "{:.0f}",
+            "W": "{:.0f}",
+            "L": "{:.0f}",
+            "SV": "{:.0f}",
+            "CG": "{:.0f}",
+            "SHO": "{:.0f}",
+            "BF": "{:.0f}",
+            "H": "{:.0f}",
+            "HR": "{:.0f}",
+            "SO": "{:.0f}",
+            "BB": "{:.0f}",
+            "IBB": "{:.0f}",
+            "HB": "{:.0f}",
+            "WP": "{:.0f}",
+            "R": "{:.0f}",
+            "ER": "{:.0f}",
+        }
+        for key, value in formatMapping.items():
+            self.df[key] = self.df[key].apply(value.format)
+        # Changing .33 to .1 and .66 to .2 in the IP column
+        self.df["IP"] = convert_ip_column_out(self.df)
         # Add "League" column
         self.df = select_league(self.df, self.suffix)
 
@@ -906,16 +1421,13 @@ def select_park_factor(df, suffix, year):
     # Drop all rows that are not the df's year
     pfDf = pfDf.drop(pfDf[pfDf.Year.astype(str) != year].index)
     # Drop all rows that do not match the df's league
-    if suffix == "BP" or suffix == "PP":
-        pfSuffix = "NPB"
-    else:
-        pfSuffix = "Farm"
+    pfSuffix = "NPB"
     pfDf = pfDf.drop(pfDf[pfDf.League != pfSuffix].index)
     # Drop remaining unneeded cols before merge
     pfDf.drop(["Year", "League"], axis=1, inplace=True)
     # Modifying all park factors for calculations
     pfDf["ParkF"] = (pfDf["ParkF"] + 1) / 2
-    df = df.merge(pfDf, on="Team")
+    df = df.merge(pfDf, on="Team", how="left")
     # For team files, league avg calculations have park factor as 1.000
     df.loc[df.Team == "League Average", "ParkF"] = 1.000
 
