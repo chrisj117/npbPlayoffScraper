@@ -372,21 +372,12 @@ class PlayerData(Stats):
             self.df["OBP"] = (
                 self.df["H"] + self.df["BB"] + self.df["HP"]
             ) / self.df["PA"]
-        # DEBUG
-        # self.df.to_csv("test.csv",index=False)
-        print(self.df.to_string())
-        with open("output.txt", "w") as f:
-            print(self.df.to_string(), file=f)
 
         # Translate player names TODO
 
         # Unnecessary data removal
         # Remove all players if their PA is 0
         self.df = self.df.drop(self.df[self.df.PA == 0].index)
-        # Drop last column TODO remove?
-        # self.df.drop(
-        #    self.df.columns[len(self.df.columns) - 1], axis=1, inplace=True
-        # )
 
         # Counting stat column totals used in other calculations
         totalAB = self.df["AB"].sum()
@@ -540,6 +531,8 @@ class TeamData(Stats):
         Parameters: N/A
 
         Returns: N/A"""
+        # Fix NaNs in League col
+        self.df["League"] = self.df["League"].fillna("")
         # Make dir that will store alt views of the dataframes
         altDir = os.path.join(self.yearDir, "alt")
         if not (os.path.exists(altDir)):
@@ -751,10 +744,8 @@ class TeamData(Stats):
         self.df.columns = self.df.iloc[0]
         self.df.drop(index=0, axis=1, inplace=True)
         # Create park factors for any remaining team stats
-        # Team OPS+ needs park factors
         self.df = select_park_factor(self.df, self.suffix, self.year)
 
-        # Calculate OPS+ with new dataframe
         # Total OPS of the teams / total OPS of the league
         self.df["OPS+"] = round(
             100
@@ -762,20 +753,14 @@ class TeamData(Stats):
             0,
         )
         self.df["OPS+"] = self.df["OPS+"] / self.df["ParkF"]
-        # Calculate ISO
         self.df["ISO"] = round(self.df["SLG"] - self.df["AVG"], 3)
-        # Calculate K%
         self.df["K%"] = round(self.df["SO"] / self.df["PA"], 3)
-        # Calculate BB%
         self.df["BB%"] = round(self.df["BB"] / self.df["PA"], 3)
-        # Calculate BB/K
         self.df["BB/K"] = round(self.df["BB"] / self.df["SO"], 2)
-        # Calculate TTO%
         self.df["TTO%"] = (
             self.df["BB"] + self.df["SO"] + self.df["HR"]
         ) / self.df["PA"]
         self.df["TTO%"] = self.df["TTO%"].apply("{:.1%}".format)
-        # Calculate BABIP
         numer = self.df["H"] - self.df["HR"]
         denom = self.df["AB"] - self.df["SO"] - self.df["HR"] + self.df["SF"]
         self.df["BABIP"] = round((numer / denom), 3)
@@ -1528,6 +1513,8 @@ def convert_player_to_html(df, suffix, year):
             "directory to fix this.\n"
         )
         return df
+    
+    # TODO: insert translation code here?
 
     # Read in csv that contains player name and their personal page link
     linkDf = pd.read_csv(playerLinkFile)
