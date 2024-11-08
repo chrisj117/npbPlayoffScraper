@@ -42,6 +42,13 @@ def main():
     postBatTeamStats.output_final()
     postPitchTeamStats.output_final()
 
+    # Asking user to make an upload zip for manual uploads
+    # TODO: Remove choice and auto output zips?
+    zipYN = get_user_choice("Z")
+    if zipYN == "Y":
+        make_zip(yearDir, scrapeYear)
+    input("Press Enter to exit. ")
+
 
 class Stats:
     def __init__(self, statsDir, yearDir, suffix, year):
@@ -563,7 +570,7 @@ class TeamData(Stats):
                 "in: " + newCsvFinal
             )
             print(
-                "An alternative view of team pitching results will be stored"
+                "An alternative view of team pitching results will be stored "
                 "in: " + newCsvAlt
             )
 
@@ -1513,7 +1520,7 @@ def convert_player_to_html(df, suffix, year):
             "directory to fix this.\n"
         )
         return df
-    
+
     # TODO: insert translation code here?
 
     # Read in csv that contains player name and their personal page link
@@ -1637,6 +1644,30 @@ def build_html(row):
     """Insert the link and text in a <a> tag, returns the tag as a string"""
     htmlLine = "<a href=" "{0}" ">{1}</a>".format(row["Link"], row.iloc[0])
     return htmlLine
+
+
+def make_zip(yearDir, year):
+    """Groups a year's farm and npb directories in to a single zip for
+    uploading/sending
+
+    Parameters:
+    yearDir (string): The directory that stores the raw, scraped NPB stats
+    year (string): The year of npb stats to group together
+
+    Returns: N/A"""
+    tempDir = os.path.join(yearDir, "/stats/temp")
+    tempDir = tempfile.mkdtemp()
+    # Gather relevant dir to put into temp
+    shutil.copytree(
+        yearDir + "/npb", tempDir + "/stats/npb", dirs_exist_ok=True
+    )
+    # Create upload zip
+    outputFilename = yearDir + "/" + year + "upload"
+    dirName = tempDir
+    shutil.make_archive(outputFilename, "zip", dirName)
+    shutil.rmtree(tempDir)
+    # Output name of upload zip
+    print("Upload zip can be found at: " + outputFilename + ".zip")
 
 
 if __name__ == "__main__":
