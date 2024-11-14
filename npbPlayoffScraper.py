@@ -1124,58 +1124,26 @@ def get_stat_urls(suffix, year):
     Returns:
     urlArrBaseB (array - string): Contains URLs to the team batting/pitching
     stat pages"""
-    if suffix == "BP":
-        # Team regular season individual batting stats
-        urlArrBase = [
-            # Hanshin Tigers RD1
-            "https://npb.jp/bis/2024/stats/idb1s1_t.html",
-            # YOKOHAMA DeNA BAYSTARS RD1
-            "https://npb.jp/bis/2024/stats/idb1s1_db.html",
-            # Chiba Lotte Marines RD1
-            "https://npb.jp/bis/2024/stats/idb1s1_m.html",
-            # Hokkaido Nippon-Ham Fighters RD1
-            "https://npb.jp/bis/2024/stats/idb1s1_f.html",
-            # Fukuoka SoftBank Hawks RD2
-            "https://npb.jp/bis/2024/stats/idb1s2_h.html",
-            # Yomiuri Giants RD2
-            "https://npb.jp/bis/2024/stats/idb1s2_g.html",
-            # Hokkaido Nippon-Ham Fighters RD2
-            "https://npb.jp/bis/2024/stats/idb1s2_f.html",
-            # YOKOHAMA DeNA BAYSTARS RD2
-            "https://npb.jp/bis/2024/stats/idb1s2_db.html",
-            # YOKOHAMA DeNA BAYSTARS Final
-            "https://npb.jp/bis/2024/stats/idb1ns_db.html",
-            # Fukuoka SoftBank Hawks Final
-            "https://npb.jp/bis/2024/stats/idb1ns_h.html",
-        ]
-    elif suffix == "PP":
-        # Team regular season individual pitching stats
-        urlArrBase = [
-            # Hanshin Tigers RD1
-            "https://npb.jp/bis/2024/stats/idp1s1_t.html",
-            # YOKOHAMA DeNA BAYSTARS RD1
-            "https://npb.jp/bis/2024/stats/idp1s1_db.html",
-            # Chiba Lotte Marines RD1
-            "https://npb.jp/bis/2024/stats/idp1s1_m.html",
-            # Hokkaido Nippon-Ham Fighters RD1
-            "https://npb.jp/bis/2024/stats/idp1s1_f.html",
-            # Fukuoka SoftBank Hawks RD2
-            "https://npb.jp/bis/2024/stats/idp1s2_h.html",
-            # Yomiuri Giants RD2
-            "https://npb.jp/bis/2024/stats/idp1s2_g.html",
-            # Hokkaido Nippon-Ham Fighters RD2
-            "https://npb.jp/bis/2024/stats/idp1s2_f.html",
-            # YOKOHAMA DeNA BAYSTARS RD2
-            "https://npb.jp/bis/2024/stats/idp1s2_db.html",
-            # YOKOHAMA DeNA BAYSTARS Final
-            "https://npb.jp/bis/2024/stats/idp1ns_db.html",
-            # Fukuoka SoftBank Hawks Final
-            "https://npb.jp/bis/2024/stats/idp1ns_h.html",
-        ]
+    # Drop entries with incorrect year and suffix
+    # Check for the player link file, if nothing is there tell user and return
+    relDir = os.path.dirname(__file__)
+    playoffUrlFile = relDir + "/input/playoffUrls.csv"
+    if not (os.path.exists(playoffUrlFile)):
+        print(
+            "\nERROR: No playoff URL file found, no links to scrape...\n"
+            "Provide a valid playoffUrls.csv file in the /input/ directory to "
+            "fix this.\n"
+        )
+        urlArrBase = np.nan
+        return urlArrBase
 
-    # Loop through each entry and change the year in the URL before returning
-    for i, url in enumerate(urlArrBase):
-        urlArrBase[i] = urlArrBase[i].replace("2024", year)
+    urlDf = pd.read_csv(playoffUrlFile)
+    # Drop all rows that are not the df's year
+    urlDf = urlDf.drop(urlDf[urlDf.Year.astype(str) != year].index)
+    # Drop all rows that do not match the requested stats (batting/pitching)
+    urlDf = urlDf.drop(urlDf[urlDf.Suffix != suffix].index)
+    # Return URL arr for that year and stat type
+    urlArrBase = urlDf["Link"]
     return urlArrBase
 
 
@@ -1451,6 +1419,7 @@ def select_fip_const(suffix, year):
     fipDf = pd.read_csv(fipFile)
     # Drop all rows that are not the df's year
     fipDf = fipDf.drop(fipDf[fipDf.Year.astype(str) != year].index)
+    # TODO: FIP const for playoffs, choose between reg or farm
     # Drop all rows that do not match the df's league
     if suffix == "BP" or suffix == "PP":
         fipSuffix = "NPB"
