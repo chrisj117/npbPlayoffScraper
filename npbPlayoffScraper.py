@@ -98,14 +98,20 @@ class PlayerData(Stats):
         if not (os.path.exists(uploadDir)):
             os.mkdir(uploadDir)
 
+        # Translate player names
+        if self.suffix == "BP":
+            translateCol = "Player"
+        elif self.suffix == "PP":
+            translateCol = "Pitcher"
+        self.df = translate_players(self.df, translateCol)
         # Print organized dataframe to file
         newCsvAlt = altDir + "/" + self.year + "AltView" + self.suffix + ".csv"
         self.df.to_string(newCsvAlt)
         # Make deep copy of original df to avoid HTML in df's team/player names
         finalDf = self.df.copy()
         # Convert player/team names to HTML that contains appropriate URLs
-        if int(self.year) == datetime.now().year:
-            finalDf = convert_player_to_html(finalDf, self.suffix, self.year)
+        # if int(self.year) == datetime.now().year:
+        finalDf = convert_player_to_html(finalDf, self.suffix, self.year)
         finalDf = convert_team_to_html(finalDf, "Abb")
         # Print final file with all players
         newCsvFinal = (
@@ -406,9 +412,8 @@ class PlayerData(Stats):
         ) / totalAB
 
         # Individual statistic calculations
-        # Calculate OPS
+
         self.df["OPS"] = round(self.df["SLG"] + self.df["OBP"], 3)
-        # Calculate OPS+
         self.df = select_park_factor(self.df, self.suffix, self.year)
         self.df["OPS+"] = round(
             100
@@ -416,20 +421,14 @@ class PlayerData(Stats):
             0,
         )
         self.df["OPS+"] = self.df["OPS+"] / self.df["ParkF"]
-        # Calculate ISO
         self.df["ISO"] = round(self.df["SLG"] - self.df["AVG"], 3)
-        # Calculate K%
         self.df["K%"] = round(self.df["SO"] / self.df["PA"], 3)
-        # Calculate BB%
         self.df["BB%"] = round(self.df["BB"] / self.df["PA"], 3)
-        # Calculate BB/K
         self.df["BB/K"] = round(self.df["BB"] / self.df["SO"], 2)
-        # Calculate TTO%
         self.df["TTO%"] = (
             self.df["BB"] + self.df["SO"] + self.df["HR"]
         ) / self.df["PA"]
         self.df["TTO%"] = self.df["TTO%"].apply("{:.1%}".format)
-        # Calculate BABIP
         numer = self.df["H"] - self.df["HR"]
         denom = self.df["AB"] - self.df["SO"] - self.df["HR"] + self.df["SF"]
         self.df["BABIP"] = round((numer / denom), 3)
@@ -1101,6 +1100,30 @@ def get_playoff_stats(yearDir, suffix, year):
                 yearTitleStr = yearTitleStr.replace(
                     "年度 横浜DeNAベイスターズ", "DeNA BayStars"
                 )
+            if yearTitleStr.find("年度 オリックス・バファローズ"):
+                yearTitleStr = yearTitleStr.replace(
+                    "年度 オリックス・バファローズ", "ORIX Buffaloes"
+                )
+            if yearTitleStr.find("年度 広島東洋カープ"):
+                yearTitleStr = yearTitleStr.replace(
+                    "年度 広島東洋カープ", "Hiroshima Carp"
+                )
+            if yearTitleStr.find("年度 中日ドラゴンズ"):
+                yearTitleStr = yearTitleStr.replace(
+                    "年度 中日ドラゴンズ", "Chunichi Dragons"
+                )
+            if yearTitleStr.find("年度 埼玉西武ライオンズ"):
+                yearTitleStr = yearTitleStr.replace(
+                    "年度 埼玉西武ライオンズ", "Seibu Lions"
+                )
+            if yearTitleStr.find("年度 東北楽天ゴールデンイーグルス"):
+                yearTitleStr = yearTitleStr.replace(
+                    "年度 東北楽天ゴールデンイーグルス", "Rakuten Eagles"
+                )
+            if yearTitleStr.find("年度 東京ヤクルトスワローズ"):
+                yearTitleStr = yearTitleStr.replace(
+                    "年度 東京ヤクルトスワローズ", "Yakult Swallows"
+                )
             yearTitleStr = yearTitleStr.lstrip()
             yearTitleStr = yearTitleStr.rstrip()
             # Append as last entry and move to next row
@@ -1276,7 +1299,7 @@ def get_user_choice(suffix):
                 "npb.jp or only reorganize existing stat files.\nWARNING: "
                 "EXISTING RAW STAT FILES MUST BE PRESENT TO SKIP SCRAPING."
             )
-            userIn = input("Scrape regular season stats stats? (Y/N): ")
+            userIn = input("Scrape post season stats? (Y/N): ")
         elif suffix == "Z":
             userIn = input(
                 "Output these stats in a zip file for manual "
@@ -1490,8 +1513,6 @@ def convert_player_to_html(df, suffix, year):
         )
         return df
 
-    # TODO: insert translation code here?
-
     # Read in csv that contains player name and their personal page link
     linkDf = pd.read_csv(playerLinkFile)
     # Create new HTML code column
@@ -1499,11 +1520,12 @@ def convert_player_to_html(df, suffix, year):
     # Create dict of Player Name:Complete HTML tag
     playerDict = dict(linkDf.values)
 
-    # Replace all team entries with HTML that leads to their pages
+    # Replace all player entries with HTML that leads to their pages
     if suffix == "PP":
         convertCol = "Pitcher"
     else:
         convertCol = "Player"
+    # Convert to HTML
     df[convertCol] = (
         df[convertCol]
         .map(playerDict)
@@ -1527,7 +1549,49 @@ def convert_player_to_html(df, suffix, year):
                 .fillna(df[convertCol])
                 .astype(str)
             )
+    return df
 
+
+def translate_players(df, playerColName):
+    """Translates player names from Japanese to English using a csv file
+    containing the translations
+
+    Parameters:
+    df (pandas dataframe): A dataframe containing entries with player names
+    playerColName (string): The name of the column containing player names
+
+    Returns:
+    df (pandas dataframe): The dataframe with translated player"""
+    relDir = os.path.dirname(__file__)
+    translationFile = relDir + "/input/nameTranslations.csv"
+    if not (os.path.exists(translationFile)):
+        print(
+            "\nERROR: No player name translation file found, player names "
+            "will not be translated...\nProvide a nameTranslations.csv file in"
+            " the /input/ directory to fix this.\n"
+        )
+        return df
+    # Strip input of JP space
+    df[playerColName] = df[playerColName].str.replace("　", " ")
+    # Read in csv that contains player name and their personal page link
+    translateDf = pd.read_csv(translationFile)
+    # Create dict of JP name:Eng name
+    playerDict = dict(
+        zip(
+            (zip(translateDf["jp_name"], translateDf["en_team"])),
+            translateDf["en_name"],
+        )
+    )
+    df["keys"] = list(zip(df[playerColName], df["Team"]))
+    df[playerColName] = (
+        df["keys"]
+        .map(playerDict)
+        .infer_objects()
+        .fillna(df[playerColName])
+        .astype(str)
+    )
+    df[playerColName] = df[playerColName].str.replace('"', "")
+    df[playerColName] = df[playerColName].str.replace(",", "")
     return df
 
 

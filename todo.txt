@@ -1,0 +1,5 @@
+# TODO: read in post season player stat links (in get_stat_urls()) (check with Gio)
+
+# TODO: refactor unneeded if statements
+# TODO: apply some changes (org_pitch() reordering columns) to npbScrapeV10.py
+# TODO: translate player names
